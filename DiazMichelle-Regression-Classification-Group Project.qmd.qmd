@@ -1,0 +1,510 @@
+---
+title: "Reflection on Regression and Classification Models with Group Project Data"
+subtitle: "Analytics Objective: Predict spending of a customer at an e-commerce site"
+author: "Michelle Diaz"
+date: Juky 28, 2026
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    toc-expand: 1
+    toc-location: right-body
+    toc-title: "Contents"
+    number-sections: true
+    code-fold: show
+    code-tools: true
+    theme: cosmo
+    highlight-style: github
+    df-print: kable
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+  freeze: true  # Turn back on after the notebook renders cleanly
+---
+
+## Introduction
+
+This reflection is organized into two parts. The first section frames my group project's research objective (RO3) as a machine learning task, connecting it to the regression methods covered in this module. The second section works through the Regression Models codebook exercises using the provided synthetic CLV dataset, since data access for my group's H&M dataset is still pending.
+
+# Part 1: Applying ML Framing to My Group Project (RO3)
+
+## Research Objective as a Machine Learning Task
+
+```{=html}
+<!-- Describe RO3 here: sales channel vs. spending patterns.
+Discuss: supervised vs unsupervised, what the outcome variable is (annual/total spend),
+what the predictor variables are (sales channel, club membership, age, fashion news frequency),
+and why this is framed as a regression task rather than classification. -->
+```
+
+## Planned Approach
+
+```{r}
+#| eval: false
+library(tidyverse)
+library(tidymodels)
+```
+
+### Data Wrangling
+
+```{r}
+#| eval: false
+# customers <- read_csv("data/customers.csv")
+# articles <- read_csv("data/articles.csv")
+# transactions <- read_csv("data/transactions.csv")
+```
+
+```{r}
+#| eval: false
+# Join transactions with customer metadata on customer_id
+# Aggregate price to total spend per customer
+```
+
+### Exploratory Visualization
+
+```{r}
+#| eval: false
+# Distribution of spend by sales channel (boxplot / violin plot)
+# Bar chart: average spend per club membership status
+```
+
+### Train/Test Split
+
+<!-- initial_split(), training(), testing() once data is available -->
+
+### Recipe
+
+```{r}
+#| eval: false
+# spend_recipe <- recipe(total_spend ~ sales_channel_id + club_member_status +
+#                           age + fashion_news_frequency,
+#                         data = train_data) |>
+#   step_impute_median(all_numeric_predictors()) |>
+#   step_dummy(all_nominal_predictors()) |>
+#   step_normalize(all_numeric_predictors())
+```
+
+### Model Specification
+
+```{r}
+#| eval: false
+# lm_spec <- linear_reg() |>
+#   set_engine("lm")
+```
+
+### Workflow
+
+```{r}
+#| eval: false
+# spend_workflow <- workflow() |>
+#   add_recipe(spend_recipe) |>
+#   add_model(lm_spec)
+```
+
+### Fit Model
+
+```{r}
+#| eval: false
+# spend_fit <- spend_workflow |>
+#   fit(data = train_data)
+```
+
+### Evaluate
+
+```{r}
+#| eval: false
+# Predict on test set
+# Calculate RMSE, MAE
+# Examine coefficients: does sales channel meaningfully predict spend?
+```
+
+## Data Access Note
+
+```{=html}
+<!-- Brief note that full data access is still pending from a group member,
+and that the CLV codebook dataset below was used to demonstrate the full ML process
+in the meantime. -->
+```
+
+# Part 2: Regression Models Codebook Exercises (CLV Dataset)
+
+## Dataset Overview
+
+```{=html}
+<!-- Brief description of the synthetic clv_data dataset: n = 2500, seed 2025,
+variables (age, income, tenure_months, num_products, freq_purchases, recency_days,
+avg_basket, channel, loyalty_tier, region, promo_response), outcome = annual_spend.
+Note: age and region were NOT part of the true data-generating process (pure noise). -->
+```
+
+```{r}
+#| eval: false
+library(tidymodels)
+library(tidyverse)
+library(glmnet) # Ridge, Lasso, Elastic Net engine
+library(patchwork) # combining plots
+library(vip) # variable importance plots
+tidymodels_prefer()
+set.seed(2025)
+```
+
+```{r}
+#| eval: false
+set.seed(2025)
+n <- 2500
+clv_data <- tibble(
+  customer_id = paste0("CLV", str_pad(1:n, 5, pad = "0")),
+  age = round(pmin(pmax(rnorm(n, mean = 42, sd = 12), 18), 85)),
+  income = round(rlnorm(n, meanlog = 10.8, sdlog = 0.55)),
+  tenure_months = round(pmax(1, rnorm(n, mean = 30, sd = 18))),
+  num_products = sample(
+    1:6,
+    n,
+    replace = TRUE,
+    prob = c(0.25, 0.30, 0.20, 0.12, 0.08, 0.05)
+  ),
+  freq_purchases = rpois(n, lambda = 8),
+  recency_days = round(pmax(0, rexp(n, rate = 1 / 30))), # mean = 1/rate
+  avg_basket = round(rlnorm(n, meanlog = 4.0, sdlog = 0.45), 2), # $
+  channel = sample(
+    c("online", "in_store", "both"),
+    n,
+    replace = TRUE,
+    prob = c(0.45, 0.25, 0.30)
+  ),
+  loyalty_tier = sample(
+    c("Bronze", "Silver", "Gold", "Platinum"),
+    n,
+    replace = TRUE,
+    prob = c(0.35, 0.30, 0.22, 0.13)
+  ),
+  region = sample(
+    c("West", "South", "Midwest", "Northeast"),
+    n,
+    replace = TRUE
+  ),
+  promo_response = sample(
+    c("yes", "no"),
+    n,
+    replace = TRUE,
+    prob = c(0.40, 0.60)
+  )
+) |>
+  mutate(
+    # annual_spend — continuous outcome
+    # driven by income, frequency, basket size, products owned, loyalty
+    annual_spend = round(
+      pmax(
+        10,
+        200 +
+          0.004 * income +
+          18 * freq_purchases +
+          0.85 * avg_basket +
+          45 * num_products -
+          0.8 * recency_days +
+          2.0 * tenure_months +
+          case_when(
+            loyalty_tier == "Platinum" ~ 350,
+            loyalty_tier == "Gold" ~ 200,
+            loyalty_tier == "Silver" ~ 80,
+            TRUE ~ 0
+          ) +
+          if_else(channel == "both", 120, 0) +
+          if_else(promo_response == "yes", 75, 0) +
+          rnorm(n, 0, 180) # noise
+      ),
+      2
+    ),
+    # Introduce missingness
+    income = if_else(runif(n) < 0.07, NA_real_, income),
+    avg_basket = if_else(runif(n) < 0.05, NA_real_, avg_basket),
+    # Encode factors
+    channel = factor(channel),
+    loyalty_tier = factor(
+      loyalty_tier,
+      levels = c("Bronze", "Silver", "Gold", "Platinum")
+    ),
+    region = factor(region),
+    promo_response = factor(promo_response)
+  )
+glimpse(clv_data)
+```
+
+```{r}
+#| eval: false
+# vip installation note: archived from CRAN 2026-07-08, now hosted on r-universe
+install.packages("vip", repos = c("https://bgreenwell.r-universe.dev", "https://cloud.r-project.org"))
+```
+
+## Exercise 13.1: Ridge vs. Lasso
+
+```{r}
+#| eval: false
+# Ridge model: mixture = 0
+ridge_spec <- linear_reg(penalty = 10, mixture = 0) |>
+  set_engine("glmnet")
+
+ridge_fit <- ridge_spec |>
+  fit(annual_spend ~ age + income + tenure_months + num_products +
+        freq_purchases + recency_days + avg_basket + channel +
+        loyalty_tier + region + promo_response,
+      data = clv_data)
+
+# Lasso model: mixture = 1
+lasso_spec <- linear_reg(penalty = 10, mixture = 1) |>
+  set_engine("glmnet")
+
+lasso_fit <- lasso_spec |>
+  fit(annual_spend ~ age + income + tenure_months + num_products +
+        freq_purchases + recency_days + avg_basket + channel +
+        loyalty_tier + region + promo_response,
+      data = clv_data)
+
+# Extract coefficients from both
+ridge_coefs <- tidy(ridge_fit)
+lasso_coefs <- tidy(lasso_fit)
+```
+
+```{r}
+#| eval: false
+ridge_coefs |> filter(estimate == 0) |> nrow()
+lasso_coefs |> filter(estimate == 0) |> nrow()
+```
+
+```{r}
+#| eval: false
+lasso_coefs |> filter(estimate == 0)
+```
+
+```{r}
+#| eval: false
+ridge_coefs |> filter(term == "age")
+```
+
+```{r}
+#| eval: false
+ols_spec <- linear_reg() |>
+  set_engine("lm")
+
+ols_fit <- ols_spec |>
+  fit(annual_spend ~ age + income + tenure_months + num_products +
+        freq_purchases + recency_days + avg_basket + channel +
+        loyalty_tier + region + promo_response,
+      data = clv_data)
+
+tidy(ols_fit) |> filter(term == "age")
+```
+
+**Results:** Ridge had 0 coefficients at exactly zero. Lasso had 4 coefficients at exactly zero: age, region_Northeast, region_South, and region_West, matching the two truly irrelevant variables (age, region) that were not part of the true data-generating process.
+
+Comparing age's coefficient across models: OLS estimate 0.0617 (p = 0.849, not significant), Ridge 0.0323 (shrunk to about half), Lasso exactly 0 (eliminated entirely).
+
+<!-- Insert your written comparison / answer to 13.1.3 (marketing manager explanation for choosing Lasso over Ridge with 50+ predictors) here. -->
+
+## Exercise 13.2: Elastic Net Mixing
+
+```{r}
+#| eval: false
+clv_split <- initial_split(clv_data, prop = 0.75)
+clv_train <- training(clv_split)
+clv_test <- testing(clv_split)
+
+clv_recipe <- recipe(annual_spend ~ age + income + tenure_months + num_products +
+                        freq_purchases + recency_days + avg_basket + channel +
+                        loyalty_tier + region + promo_response,
+                      data = clv_train) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_normalize(all_numeric_predictors())
+```
+
+```{r}
+#| eval: false
+mixture_values <- c(0.25, 0.50, 0.75)
+
+fit_and_eval <- function(mix_val) {
+  spec <- linear_reg(penalty = 0.1, mixture = mix_val) |>
+    set_engine("glmnet")
+
+  wf <- workflow() |>
+    add_recipe(clv_recipe) |>
+    add_model(spec)
+
+  fit <- wf |> fit(data = clv_train)
+
+  coefs <- tidy(fit)
+  nonzero_count <- coefs |> filter(estimate != 0) |> nrow()
+
+  preds <- predict(fit, clv_test) |> bind_cols(clv_test)
+  test_rmse <- preds |> rmse(truth = annual_spend, estimate = .pred) |> pull(.estimate)
+
+  tibble(mixture = mix_val, nonzero_coefs = nonzero_count, test_rmse = test_rmse)
+}
+
+en_results <- map_dfr(mixture_values, fit_and_eval)
+en_results
+```
+
+**Results:** All three mixture values (0.25, 0.50, 0.75) produced identical results, 16 nonzero coefficients and a test RMSE of about 181. This suggests the penalty of 0.1 was too weak to meaningfully differentiate the mixture effect between Ridge-like and Lasso-like behavior.
+
+## Exercise 13.3: Polynomial Terms
+
+```{r}
+#| eval: false
+poly_recipe_deg <- function(deg) {
+  recipe(annual_spend ~ age + income + tenure_months + num_products +
+           freq_purchases + recency_days + avg_basket + channel +
+           loyalty_tier + region + promo_response,
+         data = clv_train) |>
+    step_impute_median(all_numeric_predictors()) |>
+    step_poly(freq_purchases, tenure_months, degree = deg) |>
+    step_dummy(all_nominal_predictors()) |>
+    step_normalize(all_numeric_predictors())
+}
+
+lm_spec <- linear_reg() |> set_engine("lm")
+folds <- vfold_cv(clv_train, v = 10)
+
+get_cv_rmse <- function(deg) {
+  wf <- workflow() |>
+    add_recipe(poly_recipe_deg(deg)) |>
+    add_model(lm_spec)
+
+  res <- fit_resamples(wf, resamples = folds, metrics = metric_set(rmse))
+  collect_metrics(res) |> filter(.metric == "rmse") |> mutate(degree = deg)
+}
+
+poly_results <- map_dfr(c(1, 2, 3), get_cv_rmse)
+poly_results
+```
+
+```{r}
+#| eval: false
+deg3_spec <- linear_reg(penalty = 0.001, mixture = 0) |>
+  set_engine("glmnet")
+
+deg3_wf <- workflow() |>
+  add_recipe(poly_recipe_deg(3)) |>
+  add_model(deg3_spec)
+
+deg3_fit <- deg3_wf |> fit(data = clv_train)
+
+train_preds <- predict(deg3_fit, clv_train) |> bind_cols(clv_train)
+test_preds <- predict(deg3_fit, clv_test) |> bind_cols(clv_test)
+
+train_preds |> rmse(truth = annual_spend, estimate = .pred)
+test_preds |> rmse(truth = annual_spend, estimate = .pred)
+```
+
+**Results:** CV RMSE stayed flat (around 188) across polynomial degrees 1, 2, and 3, well within one standard error of each other. Training RMSE (187) was close to test RMSE (183) for the degree-3 model, showing no overfitting. This suggests the true relationship between these predictors and spend is linear rather than curved.
+
+## Exercise 13.4: Tuned Elastic Net
+
+```{r}
+#| eval: false
+tune_spec <- linear_reg(penalty = tune(), mixture = tune()) |>
+  set_engine("glmnet")
+
+tune_wf <- workflow() |>
+  add_recipe(clv_recipe) |>
+  add_model(tune_spec)
+
+tune_grid_vals <- grid_regular(penalty(), mixture(), levels = 5)
+
+tune_results <- tune_grid(
+  tune_wf,
+  resamples = folds,
+  grid = tune_grid_vals,
+  metrics = metric_set(rmse)
+)
+
+show_best(tune_results, metric = "rmse", n = 5)
+```
+
+**Results:** The best result came from penalty ≈ 1, mixture = 1 (pure Lasso), but the top 5 results were all within about 0.03 RMSE of each other. This indicates tuning both parameters jointly added little value over simply using Lasso alone.
+
+## Exercise 13.5: Business Interpretation of Final Tuned Lasso
+
+```{r}
+#| eval: false
+# Rebuild/confirm tuned Lasso from Section 7 (mixture = 1 fixed, only penalty tuned)
+lasso_tune_spec <- linear_reg(penalty = tune(), mixture = 1) |>
+  set_engine("glmnet")
+
+lasso_tune_wf <- workflow() |>
+  add_recipe(clv_recipe) |>
+  add_model(lasso_tune_spec)
+
+lasso_grid <- grid_regular(penalty(), levels = 20)
+
+lasso_tune_results <- tune_grid(
+  lasso_tune_wf,
+  resamples = folds,
+  grid = lasso_grid,
+  metrics = metric_set(rmse)
+)
+
+best_lasso_penalty <- select_best(lasso_tune_results, metric = "rmse")
+best_lasso_penalty
+
+# Finalize workflow with the best penalty and fit on full training data
+final_lasso_wf <- finalize_workflow(lasso_tune_wf, best_lasso_penalty)
+final_lasso_fit <- final_lasso_wf |> fit(data = clv_train)
+
+# Coefficient table
+final_lasso_coefs <- tidy(final_lasso_fit) |>
+  arrange(desc(abs(estimate)))
+final_lasso_coefs
+```
+
+**Final tuned Lasso coefficients (penalty ≈ 1, mixture = 1), sorted by magnitude:**
+
+```         
+(Intercept)            958.
+income                 134.
+loyalty_tier_Platinum  120.
+loyalty_tier_Gold       77.7
+num_products            65.8
+channel_online         -61.0
+freq_purchases          53.4
+channel_in_store       -50.7
+promo_response_yes      38.2
+tenure_months           32.9
+loyalty_tier_Silver     30.7
+recency_days           -22.1
+avg_basket              20.9
+region_South            -2.65
+region_Northeast         1.15
+region_West             -0.650
+age                      0        <- only zeroed-out predictor
+```
+
+```{r}
+#| eval: false
+# vip needs the underlying parsnip/glmnet fit object, not the workflow itself
+final_lasso_fit |>
+  extract_fit_parsnip() |>
+  vip(num_features = 15)
+```
+
+### Q1: Three Most Important Predictors
+
+The three most important predictors of annual spend are income (134), loyalty tier (Platinum \~120, Gold \~77.7), and number of products (65.8), all positive. Income reflects disposable spending power, a fixed trait the business can't change directly but can act on indirectly (income-sensitive discount thresholds, free shipping minimums). Loyalty tier likely reflects a two-way relationship: customers who already spend more reach higher tiers, and the perks tied to those tiers then incentivize continued spending to maintain status; unlike income, loyalty tier is something the business directly designs and controls. Number of products owned is positive because it broadens a customer's engagement across categories, giving more reasons to return, actionable via cross-selling and bundling strategies.
+
+### Q2: A Predictor That Was Zeroed Out
+
+The only predictor Lasso zeroed out in the final tuned model was age. Intuitively, age seems like it should matter, since younger and older customers likely have different purchasing power and spending habits. However, age's effect is probably captured indirectly through income, since income tends to rise with career stage and age. Once income is already in the model, age doesn't add much unique predictive information, so Lasso treated it as redundant rather than truly irrelevant, and excluded it in favor of keeping income.
+
+### Q3: Most Actionable Lever for a Marketing Manager
+
+The single most actionable lever is promo response. Unlike traits such as income, age, or region, which are fixed characteristics the business can only observe, promo response reflects something the business directly controls, the promotions and offers it chooses to run. A marketing manager can launch a targeted campaign immediately and measure its effect on spend, making it the most practical and immediate lever available.
+
+# Conclusion
+
+```{=html}
+<!-- Brief closing paragraph tying together what you learned from both the
+group project framing and the codebook exercises about regularized regression. -->
+```
+
+# Appendix
